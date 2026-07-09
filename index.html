@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CAN Trace Viewer</title>
+  <link rel="stylesheet" href="vendor/uPlot.min.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1>CAN <span>Trace Viewer</span></h1>
+    <div class="stats">
+      <div>Frames <b id="stat-frames">0</b></div>
+      <div>Duration <b id="stat-dur">0 s</b></div>
+      <div>IDs known/seen <b id="stat-ids">0/0</b></div>
+      <div>Decodable signals <b id="stat-sigs">0</b></div>
+    </div>
+  </header>
+
+  <aside>
+    <div class="files">
+      <div class="drop" id="drop-sym">
+        <div class="lbl">Symbol files (.sym)</div>
+        <div class="sub">Click or drop — multiple buses allowed</div>
+        <div class="list" id="sym-list"></div>
+      </div>
+      <input type="file" id="in-sym" accept=".sym" multiple>
+      <div class="drop" id="drop-trc">
+        <div class="lbl">Trace file (.trc)</div>
+        <div class="sub">Click or drop a PCAN trace</div>
+        <div class="list" id="trc-list"></div>
+      </div>
+      <input type="file" id="in-trc" accept=".trc">
+    </div>
+
+    <div class="search">
+      <input id="search" type="text" placeholder="Filter signals / messages / 0xID…">
+      <div class="toolbar">
+        <button id="btn-expand">Expand all</button>
+        <button id="btn-clear">Clear selection</button>
+      </div>
+    </div>
+
+    <div class="catalog" id="catalog"></div>
+  </aside>
+
+  <main>
+    <div id="banner" class="banner" style="display:none"></div>
+    <div class="ctrlbar">
+      <span class="lbl">Layout</span>
+      <button id="lay-single" class="seg active">Single chart</button>
+      <button id="lay-split" class="seg">Split per signal</button>
+      <span class="hint">wheel = zoom · drag = pan · double-click = reset</span>
+      <button id="btn-reset">Reset zoom</button>
+    </div>
+    <div class="chart-wrap"><div id="chart-host"></div></div>
+    <div class="legendbar" id="legend"></div>
+  </main>
+
+  <script src="vendor/uPlot.iife.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

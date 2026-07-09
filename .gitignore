@@ -1,0 +1,21 @@
+# CAN traces — data, not tooling
+Traces/
+*.trc
+
+# Symbol / project definitions (project-specific, not part of the tool)
+*.sym
+*.dbc
+*.mpf
+*.errx
+
+# scratch / test artifacts
+_testsym/
+scratchpad/
+
+# OS / editor
+Thumbs.db
+Desktop.ini
+.DS_Store
+*.swp
+.vscode/
+.idea/
