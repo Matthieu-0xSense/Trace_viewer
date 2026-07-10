@@ -51,7 +51,14 @@
       <span class="lbl">Layout</span>
       <button id="lay-single" class="seg active">Single chart</button>
       <button id="lay-split" class="seg">Split per signal</button>
-      <span class="hint">wheel = zoom · drag = pan · double-click = reset</span>
+      <button id="lay-custom" class="seg">Custom</button>
+      <span id="count-ctrl" class="count-ctrl hidden">
+        <span class="lbl">Charts</span>
+        <button id="count-dec">−</button>
+        <span class="n" id="count-n">2</span>
+        <button id="count-inc">+</button>
+      </span>
+      <span class="hint">wheel = zoom · drag = pan · dbl-click = reset · drag legend = move signal · right-click legend = remove</span>
       <button id="btn-reset">Reset zoom</button>
     </div>
     <div class="chart-wrap"><div id="chart-host"></div></div>

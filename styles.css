@@ -115,9 +115,19 @@ input[type=file] { display: none; }
 .ctrlbar .seg.active { color: #0b0d12; background: var(--accent); border-color: var(--accent); font-weight: 600; }
 #btn-reset { margin-left: 4px; }
 
+.count-ctrl { display: flex; align-items: center; gap: 4px; }
+.count-ctrl.hidden { display: none; }
+.count-ctrl button { padding: 3px 9px; line-height: 1; }
+.count-ctrl .n { min-width: 18px; text-align: center; color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+
 .chart-wrap { flex: 1; padding: 12px; overflow: auto; min-height: 0; display: flex; flex-direction: column; }
 #chart-host { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .chart-box { margin-bottom: 8px; flex: none; }
+.chart-box.solo { flex: 1; min-height: 0; margin-bottom: 0; }
+.chart-empty {
+  height: 100%; min-height: 120px; display: flex; align-items: center; justify-content: center;
+  color: var(--muted); font-size: 12px; border: 1px dashed var(--border); border-radius: 8px;
+}
 .chart-inner { position: relative; }
 #chart { width: 100%; }
 .empty {
@@ -129,6 +139,16 @@ input[type=file] { display: none; }
   display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 8px 14px;
   border-top: 1px solid var(--border); background: var(--panel); max-height: 120px; overflow-y: auto;
 }
+.legendbar.by-chart { align-items: flex-start; gap: 10px; }
+.lg-col {
+  border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; min-width: 150px;
+  background: var(--panel2); display: flex; flex-direction: column; gap: 4px;
+}
+.lg-col.drop-hi { border-color: var(--accent); background: #1b2230; }
+.lg-head { color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; }
+.lg-empty { color: var(--muted); font-size: 11px; font-style: italic; padding: 2px 0; }
+.legendbar.by-chart .item { cursor: grab; }
+.legendbar.by-chart .item.dragging { opacity: .4; }
 .legendbar .item { display: flex; align-items: center; gap: 6px; font-size: 12px; }
 .legendbar input.sw {
   width: 14px; height: 14px; padding: 0; border: 1px solid var(--border);

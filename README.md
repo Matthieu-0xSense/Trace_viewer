@@ -21,7 +21,10 @@ Hover the chart for a value tooltip (enum values show their label).
 **Layout** — `Single chart` overlays all selected signals on one axis;
 `Split per signal` stacks one auto-scaled chart per signal (use it when signals
 have very different magnitudes, e.g. a 3000-RPM setpoint next to 0–75 RPM wheel
-speeds).
+speeds); `Custom` lets you set how many charts you want and assign signals to
+them yourself. In custom mode the legend groups into one column per chart —
+**drag a signal chip** to another column to move it, and **right-click a chip**
+(any layout) to remove that signal.
 
 **Zoom / pan** — mouse wheel zooms toward the cursor, drag pans the time window,
 double-click or the `Reset zoom` button restores full range. In split mode all

@@ -12,8 +12,10 @@ const DB = {
 let FRAMES = [];           // { t, id, dlc, bytes:Uint8Array }
 let T0 = 0;                // first frame epoch seconds
 const selected = new Set(); // catalog keys currently plotted
-let plots = [];             // active uPlot instances (1 in single mode, N in split)
-let layout = 'single';      // 'single' | 'split'
+let plots = [];             // active uPlot instances (1 in single mode, N in split/custom)
+let layout = 'single';      // 'single' | 'split' | 'custom'
+let chartCount = 2;         // number of charts in custom layout
+const chartOf = new Map();  // signal key -> chart index (custom layout)
 let fullX = null;           // [min,max] of full time range for reset
 let syncing = false;        // guard for cross-chart x-scale propagation
 
@@ -275,7 +277,7 @@ function redraw() {
   const xs = times.map(t => t - T0);
   fullX = xs.length ? [xs[0], xs[xs.length - 1]] : null;
 
-  // one value array per selected signal
+  // one value array per selected signal, keyed for reuse across groups
   const series = cats.map(() => new Array(times.length).fill(null));
   for (const fr of FRAMES) {
     if (!idsNeeded.has(fr.id)) continue;
@@ -285,19 +287,40 @@ function redraw() {
       series[s][xi] = decodeSignal(fr.bytes, cats[s].sig);
     }
   }
+  const seriesOf = new Map();
+  cats.forEach((c, i) => seriesOf.set(c.key, series[i]));
 
-  if (layout === 'single') {
-    makeChart(host, xs, series, cats, Math.max(320, host.clientHeight - 8));
-  } else {
-    const h = Math.max(150, Math.floor((host.clientHeight - 24) / cats.length) - 8);
-    for (let i = 0; i < cats.length; i++) {
-      const box = document.createElement('div');
-      box.className = 'chart-box';
-      host.appendChild(box);
-      makeChart(box, xs, [series[i]], [cats[i]], h);
+  const groups = buildGroups(cats);   // [{cats:[...]}, ...]
+  const n = groups.length;
+  const single = layout === 'single';
+  const h = single ? Math.max(320, host.clientHeight - 8)
+                   : Math.max(150, Math.floor((host.clientHeight - 24) / n) - 8);
+  for (let gi = 0; gi < n; gi++) {
+    const box = document.createElement('div');
+    box.className = 'chart-box' + (single ? ' solo' : '');
+    host.appendChild(box);
+    const g = groups[gi];
+    if (g.cats.length) {
+      makeChart(box, xs, g.cats.map(c => seriesOf.get(c.key)), g.cats, h);
+    } else {
+      box.innerHTML = `<div class="chart-empty">Chart ${gi + 1} — drag a signal here from the legend below</div>`;
     }
   }
-  renderLegend(cats);
+  renderLegend(groups);
+}
+
+// split selected signals into per-chart groups per the active layout
+function buildGroups(cats) {
+  if (layout === 'single') return [{ cats }];
+  if (layout === 'split') return cats.map(c => ({ cats: [c] }));
+  // custom: chartCount buckets, assigned by chartOf (clamped, default 0)
+  const groups = Array.from({ length: chartCount }, () => ({ cats: [] }));
+  for (const c of cats) {
+    let idx = chartOf.has(c.key) ? chartOf.get(c.key) : 0;
+    idx = Math.max(0, Math.min(chartCount - 1, idx));
+    groups[idx].cats.push(c);
+  }
+  return groups;
 }
 
 function fmtVal(v, c) {
@@ -316,6 +339,8 @@ function fmtVal(v, c) {
 function setupInteractions(u) {
   const over = u.over;
   over.style.cursor = 'grab';
+
+  over.addEventListener('dblclick', e => { e.preventDefault(); resetZoom(); });
 
   over.addEventListener('wheel', e => {
     e.preventDefault();
@@ -429,27 +454,80 @@ function updateTooltip(u, tt, cats) {
   tt.style.top = Math.max(0, top + 14) + 'px';
 }
 
-function renderLegend(cats) {
+function renderLegend(groups) {
   const host = $('#legend');
   host.innerHTML = '';
-  for (const c of cats) {
-    const item = document.createElement('div');
-    item.className = 'item';
-    const picker = document.createElement('input');
-    picker.type = 'color';
-    picker.className = 'sw';
-    picker.value = toHex(colorFor(c.key));
-    picker.title = 'Change color';
-    picker.oninput = () => { colorMap.set(c.key, picker.value); recolor(); };
-    const name = document.createElement('span');
-    name.textContent = c.msgName + '.' + c.label;
-    item.append(picker, name);
-    host.appendChild(item);
+  if (layout === 'custom') {
+    host.classList.add('by-chart');
+    groups.forEach((g, gi) => host.appendChild(makeLegendCol(g, gi)));
+  } else {
+    host.classList.remove('by-chart');
+    for (const g of groups) for (const c of g.cats) host.appendChild(makeChip(c, false));
   }
 }
 
-// re-render with new colors, keeping the current zoom window
-function recolor() {
+// one drop-target column per chart (custom layout)
+function makeLegendCol(g, gi) {
+  const col = document.createElement('div');
+  col.className = 'lg-col';
+  const head = document.createElement('div');
+  head.className = 'lg-head';
+  head.textContent = 'Chart ' + (gi + 1);
+  col.appendChild(head);
+  col.addEventListener('dragover', e => { e.preventDefault(); col.classList.add('drop-hi'); });
+  col.addEventListener('dragleave', () => col.classList.remove('drop-hi'));
+  col.addEventListener('drop', e => {
+    e.preventDefault();
+    col.classList.remove('drop-hi');
+    const key = e.dataTransfer.getData('text/plain');
+    if (key && selected.has(key)) { chartOf.set(key, gi); redrawKeepZoom(); }
+  });
+  for (const c of g.cats) col.appendChild(makeChip(c, true));
+  if (!g.cats.length) {
+    const ph = document.createElement('div');
+    ph.className = 'lg-empty';
+    ph.textContent = 'drop signals here';
+    col.appendChild(ph);
+  }
+  return col;
+}
+
+// a legend chip: color picker + name; drag to move (custom), right-click to remove
+function makeChip(c, draggable) {
+  const item = document.createElement('div');
+  item.className = 'item';
+  item.title = 'Right-click to remove' + (draggable ? ' · drag to another chart' : '');
+  if (draggable) {
+    item.draggable = true;
+    item.addEventListener('dragstart', e => {
+      e.dataTransfer.setData('text/plain', c.key);
+      e.dataTransfer.effectAllowed = 'move';
+      item.classList.add('dragging');
+    });
+    item.addEventListener('dragend', () => item.classList.remove('dragging'));
+  }
+  const picker = document.createElement('input');
+  picker.type = 'color';
+  picker.className = 'sw';
+  picker.value = toHex(colorFor(c.key));
+  picker.title = 'Change color';
+  picker.oninput = () => { colorMap.set(c.key, picker.value); recolor(); };
+  const name = document.createElement('span');
+  name.className = 'nm';
+  name.textContent = c.msgName + '.' + c.label;
+  item.append(picker, name);
+  item.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    selected.delete(c.key);
+    chartOf.delete(c.key);
+    renderCatalog(currentFilter());
+    redrawKeepZoom();
+  });
+  return item;
+}
+
+// re-render, keeping the current zoom window (used by recolor / reassign / remove)
+function redrawKeepZoom() {
   const keep = plots.length ? { ...plots[0].scales.x } : null;
   redraw();
   if (keep && keep.min != null) {
@@ -458,6 +536,7 @@ function recolor() {
     syncing = false;
   }
 }
+function recolor() { redrawKeepZoom(); }
 
 // normalize any css color to #rrggbb for <input type=color>
 function toHex(col) {
@@ -549,10 +628,20 @@ window.addEventListener('DOMContentLoaded', () => {
     layout = m;
     $('#lay-single').classList.toggle('active', m === 'single');
     $('#lay-split').classList.toggle('active', m === 'split');
+    $('#lay-custom').classList.toggle('active', m === 'custom');
+    $('#count-ctrl').classList.toggle('hidden', m !== 'custom');
     if (selected.size) redraw();
   };
   $('#lay-single').onclick = () => setLayout('single');
   $('#lay-split').onclick = () => setLayout('split');
+  $('#lay-custom').onclick = () => setLayout('custom');
+  const setCount = n => {
+    chartCount = Math.max(1, Math.min(8, n));
+    $('#count-n').textContent = chartCount;
+    if (layout === 'custom' && selected.size) redrawKeepZoom();
+  };
+  $('#count-dec').onclick = () => setCount(chartCount - 1);
+  $('#count-inc').onclick = () => setCount(chartCount + 1);
   $('#btn-reset').onclick = resetZoom;
   let rt;
   window.addEventListener('resize', () => {
