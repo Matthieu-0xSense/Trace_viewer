@@ -135,9 +135,76 @@ function decodeSignal(bytes, sig) {
 }
 
 // ---------- TRC parser ----------
+// Two input flavours:
+//  - PCAN-View / PCAN-Explorer text .trc ($FILEVERSION 1.0 .. 2.1), one frame per line
+//  - legacy tab-delimited stream (see parseTrcTabbed)
+function parseTrc(text) {
+  if (/^;\$FILEVERSION=/m.test(text) || /^\s*1\)\s/m.test(text)) return parsePcanTrc(text);
+  return parseTrcTabbed(text);
+}
+
+// PCAN text trace. Times are ms offsets from $STARTTIME (OLE date, days since 1899-12-30);
+// output t is epoch seconds to match the tabbed format.
+function parsePcanTrc(text) {
+  const frames = [];
+  const verM = text.match(/^;\$FILEVERSION=(\d+)\.(\d+)/m);
+  const ver = verM ? verM[1] + '.' + verM[2] : '1.1';
+  const stM = text.match(/^;\$STARTTIME=([\d.]+)/m);
+  const t0 = stM ? (parseFloat(stM[1]) - 25569) * 86400 : 0;
+  // v2.x: column layout given by $COLUMNS (N=number O=offset T=type B=bus I=id d=dir R=reserved L=dlc l=len D=data)
+  let cols = null;
+  const colM = text.match(/^;\$COLUMNS=([^\r\n]+)/m);
+  if (colM) cols = colM[1].split(',').map(c => c.trim());
+  else if (ver === '2.0') cols = ['N', 'O', 'T', 'I', 'd', 'l', 'D'];
+  else if (ver.startsWith('2.')) cols = ['N', 'O', 'T', 'B', 'I', 'd', 'R', 'l', 'D'];
+
+  const lines = text.split(/\r?\n/);
+  for (const line of lines) {
+    if (!line || line[0] === ';') continue;
+    const tok = line.trim().split(/\s+/);
+    if (tok.length < 3) continue;
+    let off, id, dlc, dataStart;
+    if (cols) {
+      const ix = c => cols.indexOf(c);
+      const iT = ix('T');
+      if (iT >= 0 && !/^(DT|FD|FB|FE|BI)$/.test(tok[iT])) continue; // skip RR, ST, ER, EC...
+      off = parseFloat(tok[ix('O')]);
+      id = parseInt(tok[ix('I')], 16);
+      const iL = ix('L') >= 0 ? ix('L') : ix('l');
+      dlc = parseInt(tok[iL], 10);
+      if (ix('l') >= 0 && ix('L') >= 0) dlc = parseInt(tok[ix('l')], 10); // prefer byte length
+      dataStart = ix('D');
+    } else {
+      // v1.x: "N)" off [bus] type id [reserved] dlc data...
+      if (!/\)$/.test(tok[0])) continue;
+      let i = 1;
+      off = parseFloat(tok[i++]);
+      if (ver === '1.0') {
+        id = parseInt(tok[i++], 16);
+      } else {
+        if (ver !== '1.1') i++;               // bus (1.2, 1.3)
+        const type = tok[i++];
+        if (type !== 'Rx' && type !== 'Tx') continue; // Error / Warng / Info
+        id = parseInt(tok[i++], 16);
+        if (ver === '1.3') i++;               // reserved '-'
+      }
+      if (tok[i] === 'RTR') continue;
+      dlc = parseInt(tok[i++], 10);
+      if (tok[i] === 'RTR') continue;
+      dataStart = i;
+    }
+    if (!Number.isFinite(off) || !Number.isFinite(id) || !Number.isFinite(dlc)) continue;
+    const bytes = new Uint8Array(8);
+    const n = Math.min(dlc, 8, tok.length - dataStart);
+    for (let k = 0; k < n; k++) bytes[k] = parseInt(tok[dataStart + k], 16);
+    frames.push({ t: t0 + off / 1000, id, dlc, bytes });
+  }
+  return frames;
+}
+
 // One long tab-delimited stream. Each record: ts \t chan \t flags \t id \t dlc \t data \t xtra \t ascii
 // ts uses comma decimal (epoch seconds). data is space-separated hex, right-padded.
-function parseTrc(text) {
+function parseTrcTabbed(text) {
   const frames = [];
   // anchor on the 8-hex "xtra" field that follows the data field
   const re = /(\d+),(\d+)\t\d+\t[0-9A-Fa-f]+\t([0-9A-Fa-f]+)\t(\d+)\t([0-9A-Fa-f ]*?)\t[0-9A-Fa-f]{8}\t/g;
